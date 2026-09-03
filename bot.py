@@ -49,7 +49,7 @@ schedule_data = {
 ALLOWED_KEYWORDS = [
     "congrats", "🎉", "🥳", "💯", "🎊", "👏", 
     "congratulations", "more winnings", "keep it up", 
-    "withdrawal", "successful"
+    "withdrawal", "successful", "credit alert", "credit", "alert"
 ]
 
 def clear_telegram_webhook():
@@ -163,39 +163,14 @@ async def deliver_video_tutorial(target_id):
             buttons=get_main_menu(show_support)
         )
 
-# -------------------------------------------------------------
-# NEW MEMBER JOIN EVENT HANDLER
-# -------------------------------------------------------------
-@bot_client.on(events.ChatAction(chats=CHANNEL_TARGET))
-async def welcome_new_member(event):
-    if event.user_joined or event.user_added:
-        bot_info = await bot_client.get_me()
-        bot_username = bot_info.username
-        
-        # Send welcome message in the channel with a direct button to start the bot
-        welcome_text = (
-            f"👋 **Welcome to Income Pro!**\n\n"
-            f"Visit our official portal: {WEBSITE_LINK}\n\n"
-            f"Would you like to receive the **Video Tutorial** to get started?"
-        )
-        buttons = [
-            [Button.url("📹 Watch Video Tutorial", f"https://t.me/{bot_username}?start=tutorial")]
-        ]
-        await bot_client.send_message(CHANNEL_TARGET, welcome_text, buttons=buttons)
-
-# -------------------------------------------------------------
-# SOURCE CHANNEL MONITOR & FILTERED REPOSTER
-# -------------------------------------------------------------
-@bot_client.on(events.NewMessage(chats=SOURCE_CHANNEL))
-async def channel_repost_handler(event):
+# Helper function to process reposting
+async def process_repost(event):
     msg_text = event.message.message or ""
 
-    # Check if the post contains allowed keywords/emojis
     if not has_allowed_keyword(msg_text):
         print("⏩ Post skipped: Did not match keywords/emojis.")
         return
 
-    # Strip all links from caption or text before forwarding
     clean_caption = remove_links(msg_text)
 
     try:
@@ -207,6 +182,35 @@ async def channel_repost_handler(event):
             print("✅ Filtered post (text) reposted to target channel without links.")
     except Exception as e:
         print(f"❌ Failed to repost to target channel: {e}")
+
+# Register listeners for bot and user client
+@bot_client.on(events.NewMessage(chats=SOURCE_CHANNEL))
+async def bot_channel_repost_handler(event):
+    await process_repost(event)
+
+if user_client:
+    @user_client.on(events.NewMessage(chats=SOURCE_CHANNEL))
+    async def user_channel_repost_handler(event):
+        await process_repost(event)
+
+# -------------------------------------------------------------
+# NEW MEMBER JOIN EVENT HANDLER
+# -------------------------------------------------------------
+@bot_client.on(events.ChatAction(chats=CHANNEL_TARGET))
+async def welcome_new_member(event):
+    if event.user_joined or event.user_added:
+        bot_info = await bot_client.get_me()
+        bot_username = bot_info.username
+        
+        welcome_text = (
+            f"👋 **Welcome to Income Pro!**\n\n"
+            f"Visit our official portal: {WEBSITE_LINK}\n\n"
+            f"Would you like to receive the **Video Tutorial** to get started?"
+        )
+        buttons = [
+            [Button.url("📹 Watch Video Tutorial", f"https://t.me/{bot_username}?start=tutorial")]
+        ]
+        await bot_client.send_message(CHANNEL_TARGET, welcome_text, buttons=buttons)
 
 # -------------------------------------------------------------
 # PRIVATE CHAT AUTO-RESPONDER & TRIGGER WORDS
@@ -223,7 +227,6 @@ async def direct_message_handler(event):
     user_msg_count[sender_id] = user_msg_count.get(sender_id, 0) + 1
     show_support = user_msg_count[sender_id] >= 5
 
-    # Handle automatic trigger from channel welcome button
     if text in ["/start tutorial", "tutorial"]:
         await deliver_video_tutorial(sender_id)
         return
@@ -450,4 +453,4 @@ async def callback_handler(event):
             await event.respond("🗑 All evening messages cleared.")
         elif data == b"view_schedule":
             morning_list = "\n".join([f"  • Post #{i+1} ⏰ {item['time']}" for i, item in enumerate(schedule_data["morning_msgs"])]) or "  None"
-            even
+            evening_list = "\n".join([f"  • Post #{i+1} ⏰ {item['time']}" for i, item in enumerat
