@@ -452,5 +452,7 @@ async def callback_handler(event):
             update_job_schedule()
             await event.respond("🗑 All evening messages cleared.")
         elif data == b"view_schedule":
-            morning_list = "\n".join([f"  • Post #{i+1} ⏰ {item['time']}" for i, item in enumerate(schedule_data["morning_msgs"])]) or "  None"
-            evening_list = "\n".join([f"  • Post #{i+1} ⏰ {item['time']}" for i, item in enumerat
+            m_msgs = schedule_data.get("morning_msgs", [])
+            e_msgs = schedule_data.get("evening_msgs", [])
+            morning_list = "\n".join([f"  • Post #{i+1} ⏰ {item['time']}" for i, item in enumerate(m_msgs)]) or "  None"
+  
