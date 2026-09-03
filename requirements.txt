@@ -1,0 +1,4 @@
+telethon
+apscheduler
+pytesseract
+pillow
