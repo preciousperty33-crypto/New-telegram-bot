@@ -45,6 +45,13 @@ schedule_data = {
     "evening_msgs": []
 }
 
+# Keywords/Emojis required to repost
+ALLOWED_KEYWORDS = [
+    "congrats", "🎉", "🥳", "💯", "🎊", "👏", 
+    "congratulations", "more winnings", "keep it up", 
+    "withdrawal", "successful"
+]
+
 def clear_telegram_webhook():
     """Forces Telegram to drop any conflicting webhooks or stuck updates."""
     try:
@@ -55,12 +62,12 @@ def clear_telegram_webhook():
     except Exception as e:
         print(f"⚠️ Failed to clear webhook via HTTP API: {e}")
 
-def has_link(text):
-    """Detects if a string contains any website or Telegram link."""
+def has_allowed_keyword(text):
+    """Checks if message contains at least one allowed keyword or emoji."""
     if not text:
         return False
-    link_pattern = r'(https?://\S+|www\.\S+|t\.me/\S+|\b[A-Za-z0-9.-]+\.(?:com|net|org|app|ng|io|me|co|info)\b\S*)'
-    return bool(re.search(link_pattern, text, flags=re.IGNORECASE))
+    lower_text = text.lower()
+    return any(keyword in lower_text for keyword in ALLOWED_KEYWORDS)
 
 def remove_links(text):
     """Strips all links from text and returns clean lines."""
@@ -85,8 +92,6 @@ async def send_single_scheduled_post(msg_obj, post_type, time_str):
         await asyncio.sleep(e.seconds)
     except Exception as e:
         print(f"❌ Failed to post {post_type} message scheduled for {time_str}: {e}")
-        if admin_id:
-            await bot_client.send_message(admin_id, f"⚠️ Failed to post {post_type} message scheduled for {time_str}: {e}")
 
 def update_job_schedule():
     scheduler.remove_all_jobs()
@@ -159,29 +164,47 @@ async def deliver_video_tutorial(target_id):
         )
 
 # -------------------------------------------------------------
-# SOURCE CHANNEL MONITOR & AUTOMATIC REPOSTER
+# NEW MEMBER JOIN EVENT HANDLER
+# -------------------------------------------------------------
+@bot_client.on(events.ChatAction(chats=CHANNEL_TARGET))
+async def welcome_new_member(event):
+    if event.user_joined or event.user_added:
+        bot_info = await bot_client.get_me()
+        bot_username = bot_info.username
+        
+        # Send welcome message in the channel with a direct button to start the bot
+        welcome_text = (
+            f"👋 **Welcome to Income Pro!**\n\n"
+            f"Visit our official portal: {WEBSITE_LINK}\n\n"
+            f"Would you like to receive the **Video Tutorial** to get started?"
+        )
+        buttons = [
+            [Button.url("📹 Watch Video Tutorial", f"https://t.me/{bot_username}?start=tutorial")]
+        ]
+        await bot_client.send_message(CHANNEL_TARGET, welcome_text, buttons=buttons)
+
+# -------------------------------------------------------------
+# SOURCE CHANNEL MONITOR & FILTERED REPOSTER
 # -------------------------------------------------------------
 @bot_client.on(events.NewMessage(chats=SOURCE_CHANNEL))
 async def channel_repost_handler(event):
     msg_text = event.message.message or ""
-    lower_text = msg_text.lower()
 
-    # Rule 1: Skip any post mentioning "congratulations" or "congrats" if it has a link
-    is_congrats = "congratulations" in lower_text or "congrats" in lower_text
-    if is_congrats and has_link(msg_text):
-        print("🚫 Skipped congrats post because it contained a link.")
+    # Check if the post contains allowed keywords/emojis
+    if not has_allowed_keyword(msg_text):
+        print("⏩ Post skipped: Did not match keywords/emojis.")
         return
 
-    # Rule 2: Strip all links from caption or text before forwarding
+    # Strip all links from caption or text before forwarding
     clean_caption = remove_links(msg_text)
 
     try:
         if event.media:
             await bot_client.send_file(CHANNEL_TARGET, event.media, caption=clean_caption)
-            print("✅ Reposted media/video to target channel without links.")
+            print("✅ Filtered post (media) reposted to target channel without links.")
         elif clean_caption.strip():
             await bot_client.send_message(CHANNEL_TARGET, clean_caption)
-            print("✅ Reposted text to target channel without links.")
+            print("✅ Filtered post (text) reposted to target channel without links.")
     except Exception as e:
         print(f"❌ Failed to repost to target channel: {e}")
 
@@ -199,6 +222,11 @@ async def direct_message_handler(event):
 
     user_msg_count[sender_id] = user_msg_count.get(sender_id, 0) + 1
     show_support = user_msg_count[sender_id] >= 5
+
+    # Handle automatic trigger from channel welcome button
+    if text in ["/start tutorial", "tutorial"]:
+        await deliver_video_tutorial(sender_id)
+        return
 
     global admin_id, tutorial_video_msg
     if text == "/setadmin":
@@ -422,25 +450,4 @@ async def callback_handler(event):
             await event.respond("🗑 All evening messages cleared.")
         elif data == b"view_schedule":
             morning_list = "\n".join([f"  • Post #{i+1} ⏰ {item['time']}" for i, item in enumerate(schedule_data["morning_msgs"])]) or "  None"
-            evening_list = "\n".join([f"  • Post #{i+1} ⏰ {item['time']}" for i, item in enumerate(schedule_data["evening_msgs"])]) or "  None"
-            
-            await event.respond(
-                f"📅 **Scheduled Posts:**\n\n"
-                f"🌅 **Morning Slot ({len(schedule_data['morning_msgs'])} posts):**\n{morning_list}\n\n"
-                f"🌆 **Evening Slot ({len(schedule_data['evening_msgs'])} posts):**\n{evening_list}"
-            )
-
-async def main():
-    clear_telegram_webhook()
-    print("🚀 Starting Bot Client...")
-    await bot_client.start(bot_token=BOT_TOKEN)
-    print("✅ IncomePro Bot Client Active and Responding")
-
-    update_job_schedule()
-    scheduler.start()
-
-    await bot_client.run_until_disconnected()
-
-if __name__ == '__main__':
-    asyncio.run(main())
-  
+            even
